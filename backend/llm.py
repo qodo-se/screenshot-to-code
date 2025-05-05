@@ -395,7 +395,7 @@ async def stream_deepseek_response(
     except httpx.HTTPStatusError as e:
         print(f"DeepSeek API request failed: {e.response.status_code}")
         print(f"Response body: {await e.response.aread()}")
-        raise Exception(f"DeepSeek API error: {e.response.status_code}") from e
+        raise
     except Exception as e:
         print(f"An unexpected error occurred calling DeepSeek: {e}")
         raise
