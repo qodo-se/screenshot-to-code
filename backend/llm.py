@@ -373,13 +373,14 @@ async def stream_deepseek_response(
                 response.raise_for_status()
 
                 # Process the stream - DeepSeek might use Server-Sent Events (SSE)
+                import json
                 async for line in response.aiter_lines():
                     if line.startswith("data: "):
                         data_json = line[len("data: "):]
                         if data_json.strip() == "[DONE]":
                             break
                         try:
-                            chunk = httpx.Response(status_code=200, json=data_json).json()
+                            chunk = json.loads(data_json)
                             if (
                                 chunk.get("choices")
                                 and len(chunk["choices"]) > 0
