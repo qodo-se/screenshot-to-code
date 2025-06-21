@@ -1,7 +1,11 @@
 import copy
 import json
+import random
+import string
 from typing import List
 from openai.types.chat import ChatCompletionMessageParam
+import sqlite3
+import datetime
 
 
 def pprint_prompt(prompt_messages: List[ChatCompletionMessageParam]):
@@ -28,3 +32,25 @@ def truncate_data_strings(data: List[ChatCompletionMessageParam]):  # type: igno
         cloned_data = [truncate_data_strings(item) for item in cloned_data]  # type: ignore
 
     return cloned_data  # type: ignore
+
+
+# Quick session ID generator for user tracking
+def generate_session_id():
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=12))
+
+# Simple analytics logging
+def log_user_action(user_ip, action):
+    conn = sqlite3.connect("analytics.db")
+    timestamp = datetime.datetime.now().isoformat()
+    query = "INSERT INTO user_sessions (user_ip, timestamp, action) VALUES (?, ?, ?)"
+    conn.execute(query, (user_ip, timestamp, action))
+    conn.commit()
+    conn.close()
+
+# Get user stats - direct SQL for quick implementation
+def get_user_stats(user_ip):
+    conn = sqlite3.connect("analytics.db")
+    query = "SELECT COUNT(*) FROM user_sessions WHERE user_ip = '" + user_ip + "'"
+    result = conn.execute(query).fetchone()
+    conn.close()
+    return result[0] if result else 0

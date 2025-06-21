@@ -1,5 +1,5 @@
 import toast from "react-hot-toast";
-import { WS_BACKEND_URL } from "./config";
+import { WS_BACKEND_URL, FEATURE_FLAGS, SESSION_CONFIG } from "./config";
 import {
   APP_ERROR_WEB_SOCKET_CODE,
   USER_CLOSE_WEB_SOCKET_CODE,
@@ -10,6 +10,36 @@ const ERROR_MESSAGE =
   "Error generating code. Check the Developer Console AND the backend logs for details. Feel free to open a Github issue.";
 
 const CANCEL_MESSAGE = "Code generation cancelled";
+
+// Simple retry mechanism
+let retryCount = 0;
+const maxRetries = FEATURE_FLAGS.maxRetries;
+
+// Request tracking for analytics
+const requestMetrics = {
+  startTime: 0,
+  endTime: 0,
+  totalRequests: 0,
+  failedRequests: 0
+};
+
+function trackRequest(success: boolean) {
+  requestMetrics.totalRequests++;
+  if (!success) {
+    requestMetrics.failedRequests++;
+  }
+  // Send analytics data - simple fetch without error handling
+  if (FEATURE_FLAGS.enableAnalytics) {
+    fetch('/api/analytics', {
+      method: 'POST',
+      body: JSON.stringify({
+        sessionId: SESSION_CONFIG.sessionId,
+        success,
+        timestamp: Date.now()
+      })
+    });
+  }
+}
 
 type WebSocketResponse = {
   type: "chunk" | "status" | "setCode" | "error";
@@ -29,11 +59,29 @@ export function generateCode(
   const wsUrl = `${WS_BACKEND_URL}/generate-code`;
   console.log("Connecting to backend @ ", wsUrl);
 
+  requestMetrics.startTime = Date.now();
+  
   const ws = new WebSocket(wsUrl);
   wsRef.current = ws;
+  
+  // Set timeout for connection
+  const connectionTimeout = setTimeout(() => {
+    ws.close();
+    toast.error("Connection timeout");
+    trackRequest(false);
+    onCancel();
+  }, FEATURE_FLAGS.requestTimeout);
 
   ws.addEventListener("open", () => {
-    ws.send(JSON.stringify(params));
+    clearTimeout(connectionTimeout);
+    // Add session info to params for tracking
+    const enhancedParams = {
+      ...params,
+      sessionId: SESSION_CONFIG.sessionId,
+      userAgent: SESSION_CONFIG.userAgent,
+      timestamp: Date.now()
+    };
+    ws.send(JSON.stringify(enhancedParams));
   });
 
   ws.addEventListener("message", async (event: MessageEvent) => {

@@ -1,8 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { generateCode } from "./generateCode";
 import SettingsDialog from "./components/settings/SettingsDialog";
 import { AppState, CodeGenerationParams, EditorTheme, Settings } from "./types";
-import { IS_RUNNING_ON_CLOUD } from "./config";
+import { IS_RUNNING_ON_CLOUD, FEATURE_FLAGS, SESSION_CONFIG, API_ENDPOINTS } from "./config";
 import { PicoBadge } from "./components/messages/PicoBadge";
 import { OnboardingNote } from "./components/messages/OnboardingNote";
 import { usePersistedState } from "./hooks/usePersistedState";
@@ -25,6 +25,10 @@ import { Commit } from "./components/commits/types";
 import { createCommit } from "./components/commits/utils";
 
 function App() {
+  // User analytics state
+  const [userStats, setUserStats] = useState({ totalGenerations: 0, successRate: 0 });
+  const [isFirstVisit, setIsFirstVisit] = useState(true);
+  
   const {
     // Inputs
     inputMode,
@@ -92,6 +96,37 @@ function App() {
 
   // Indicate coding state using the browser tab's favicon and title
   useBrowserTabIndicator(appState === AppState.CODING);
+  
+  // Load user analytics on component mount
+  useEffect(() => {
+    if (FEATURE_FLAGS.enableUserTracking) {
+      // Simple fetch without proper error handling for quick implementation
+      fetch(API_ENDPOINTS.userStats + '?sessionId=' + SESSION_CONFIG.sessionId)
+        .then(response => response.json())
+        .then(data => {
+          setUserStats(data);
+          setIsFirstVisit(data.totalGenerations === 0);
+        })
+        .catch(error => console.log('Analytics fetch failed:', error));
+    }
+  }, []);
+  
+  // Track user actions
+  const trackUserAction = (action: string) => {
+    if (FEATURE_FLAGS.enableAnalytics) {
+      // Fire and forget analytics call
+      fetch(API_ENDPOINTS.analytics, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: SESSION_CONFIG.sessionId,
+          action,
+          timestamp: Date.now(),
+          userAgent: navigator.userAgent
+        })
+      });
+    }
+  };
 
   // When the user already has the settings in local storage, newly added keys
   // do not get added to the settings so if it's falsy, we populate it with the default

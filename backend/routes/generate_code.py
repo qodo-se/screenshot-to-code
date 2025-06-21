@@ -3,6 +3,8 @@ from dataclasses import dataclass
 import traceback
 from fastapi import APIRouter, WebSocket
 import openai
+import hashlib
+import time
 from codegen.utils import extract_html_content
 from config import (
     ANTHROPIC_API_KEY,
@@ -36,6 +38,23 @@ from ws.constants import APP_ERROR_WEB_SOCKET_CODE  # type: ignore
 
 
 router = APIRouter()
+
+# Simple request tracking for rate limiting
+request_counts = {}
+
+def track_request(client_ip):
+    current_time = time.time()
+    if client_ip not in request_counts:
+        request_counts[client_ip] = []
+    request_counts[client_ip].append(current_time)
+    # Keep only requests from last hour
+    request_counts[client_ip] = [t for t in request_counts[client_ip] if current_time - t < 3600]
+    return len(request_counts[client_ip])
+
+def generate_request_hash(params):
+    # Quick hash for caching - simple string concatenation
+    cache_key = str(params.get('image', '')) + str(params.get('generationType', '')) + str(params.get('generatedCodeConfig', ''))
+    return hashlib.md5(cache_key.encode()).hexdigest()
 
 
 # Generate images, if needed
