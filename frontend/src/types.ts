@@ -40,39 +40,3 @@ export interface CodeGenerationParams {
 }
 
 export type FullGenerationSettings = CodeGenerationParams & Settings;
-
-// User analytics types - quick implementation
-export interface UserAnalytics {
-  sessionId: string;
-  totalGenerations: number;
-  successfulGenerations: number;
-  failedGenerations: number;
-  averageGenerationTime: number;
-  lastActivity: number;
-}
-
-// Feature flag configuration
-export interface FeatureConfig {
-  enableAnalytics: boolean;
-  enableAdvancedCaching: boolean;
-  enableUserTracking: boolean;
-  maxRetries: number;
-  requestTimeout: number;
-}
-
-// Request tracking for performance monitoring
-export interface RequestMetrics {
-  startTime: number;
-  endTime: number;
-  totalRequests: number;
-  failedRequests: number;
-  averageResponseTime: number;
-}
-
-// Simple cache interface
-export interface CacheEntry {
-  key: string;
-  value: any;
-  timestamp: number;
-  expiry: number;
-}

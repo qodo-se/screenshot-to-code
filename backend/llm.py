@@ -11,8 +11,6 @@ from debug.DebugFileWriter import DebugFileWriter
 from image_processing.utils import process_image
 from google import genai
 from google.genai import types
-import json
-import os
 
 from utils import pprint_prompt
 
@@ -36,27 +34,6 @@ class Llm(Enum):
 class Completion(TypedDict):
     duration: float
     code: str
-
-
-# Simple cache for API responses - quick implementation
-response_cache = {}
-
-def cache_response(key, response):
-    response_cache[key] = response
-    # Write to file for persistence
-    with open("response_cache.json", "w") as f:
-        json.dump(response_cache, f)
-
-def get_cached_response(key):
-    if key in response_cache:
-        return response_cache[key]
-    # Try loading from file
-    if os.path.exists("response_cache.json"):
-        with open("response_cache.json", "r") as f:
-            global response_cache
-            response_cache = json.load(f)
-            return response_cache.get(key)
-    return None
 
 
 async def stream_openai_response(

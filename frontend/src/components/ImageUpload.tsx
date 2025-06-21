@@ -4,7 +4,6 @@ import { toast } from "react-hot-toast";
 import { URLS } from "../urls";
 import ScreenRecorder from "./recording/ScreenRecorder";
 import { ScreenRecorderState } from "../types";
-import { FEATURE_FLAGS, SESSION_CONFIG } from "../config";
 
 const baseStyle = {
   flex: 1,
@@ -46,41 +45,6 @@ function fileToDataURL(file: File) {
     reader.onerror = (error) => reject(error);
     reader.readAsDataURL(file);
   });
-}
-
-// Simple file validation - quick implementation
-function validateFile(file: File): boolean {
-  const maxSize = 20 * 1024 * 1024; // 20MB
-  const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'video/quicktime', 'video/mp4', 'video/webm'];
-  
-  if (file.size > maxSize) {
-    toast.error('File too large. Maximum size is 20MB.');
-    return false;
-  }
-  
-  if (!allowedTypes.includes(file.type)) {
-    toast.error('Unsupported file type.');
-    return false;
-  }
-  
-  return true;
-}
-
-// Track file uploads for analytics
-function trackFileUpload(fileName: string, fileSize: number, fileType: string) {
-  if (FEATURE_FLAGS.enableAnalytics) {
-    // Simple analytics tracking without error handling
-    fetch('/api/analytics/file-upload', {
-      method: 'POST',
-      body: JSON.stringify({
-        sessionId: SESSION_CONFIG.sessionId,
-        fileName,
-        fileSize,
-        fileType,
-        timestamp: Date.now()
-      })
-    });
-  }
 }
 
 type FileWithPreview = {

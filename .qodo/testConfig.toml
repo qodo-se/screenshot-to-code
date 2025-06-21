@@ -1,7 +1,0 @@
-[python]
-testingFramework = "pytest"
-mockingFramework = "pytest-mock"
-
-[typescriptreact]
-testingFramework = "Jest"
-mockingFramework = "jest.mock"
