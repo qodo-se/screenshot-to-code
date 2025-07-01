@@ -2,10 +2,13 @@ import copy
 from enum import Enum
 import base64
 import time
+import os
 from typing import Any, Awaitable, Callable, List, cast, TypedDict
 from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageParam, ChatCompletionChunk
+import httpx
+from dotenv import load_dotenv
 from config import IS_DEBUG_ENABLED
 from debug.DebugFileWriter import DebugFileWriter
 from image_processing.utils import process_image
@@ -13,6 +16,9 @@ from google import genai
 from google.genai import types
 
 from utils import pprint_prompt
+
+# Load environment variables from .env file if present
+load_dotenv()
 
 
 # Actual model versions that are passed to the LLMs and stored in our logs
@@ -29,7 +35,11 @@ class Llm(Enum):
     CLAUDE_3_5_SONNET_2024_10_22 = "claude-3-5-sonnet-20241022"
     GEMINI_2_0_FLASH_EXP = "gemini-2.0-flash-exp"
     O1_2024_12_17 = "o1-2024-12-17"
+    DEEPSEEK_CODER = "deepseek-coder"
 
+# DeepSeek Configuration - Load from environment variables
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+DEEPSEEK_API_BASE_URL = os.getenv("DEEPSEEK_API_BASE_URL", "https://api.deepseek.com/v1")
 
 class Completion(TypedDict):
     duration: float
@@ -299,4 +309,98 @@ async def stream_gemini_response(
             full_response += response.text  # type: ignore
             await callback(response.text)  # type: ignore
     completion_time = time.time() - start_time
+    return {"duration": completion_time, "code": full_response}
+
+
+async def stream_deepseek_response(
+    messages: List[ChatCompletionMessageParam],
+    api_key: str,
+    callback: Callable[[str], Awaitable[None]],
+    model: Llm,
+) -> Completion:
+    """
+    Streams responses from the DeepSeek API.
+
+    Note: DeepSeek's API might behave differently regarding streaming
+    and message formats compared to OpenAI or Claude. Adjustments might be needed
+    based on their specific documentation.
+    """
+    start_time = time.time()
+
+    if not api_key:
+        raise ValueError("DEEPSEEK_API_KEY is not set.")
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+    # Message Format Translation
+    deepseek_messages = []
+    for msg in messages:
+        role = msg.get("role")
+        content = msg.get("content")
+
+        if isinstance(content, list):
+             # Assuming text content for now, might need image handling logic
+             text_parts = [part.get("text") for part in content if part.get("type") == "text"]
+             content_str = "\n".join(filter(None, text_parts))
+             # TODO: Add image handling if DeepSeek supports multimodal input
+        else:
+            content_str = content
+
+        if role and content_str:
+            deepseek_messages.append({"role": role, "content": content_str})
+        elif role and not content_str and role == 'system':
+             deepseek_messages.append({"role": role, "content": ""})
+
+    # API Call
+    payload = {
+        "model": model.value,
+        "messages": deepseek_messages,
+        "max_tokens": 4096,
+        "temperature": 0,
+        "stream": True,
+    }
+
+    endpoint = f"{DEEPSEEK_API_BASE_URL}/chat/completions"
+    full_response = ""
+
+    try:
+        async with httpx.AsyncClient(timeout=600.0) as client:
+            async with client.stream("POST", endpoint, headers=headers, json=payload) as response:
+                response.raise_for_status()
+
+                # Process the stream - DeepSeek might use Server-Sent Events (SSE)
+                import json
+                async for line in response.aiter_lines():
+                    if line.startswith("data: "):
+                        data_json = line[len("data: "):]
+                        if data_json.strip() == "[DONE]":
+                            break
+                        try:
+                            chunk = json.loads(data_json)
+                            if (
+                                chunk.get("choices")
+                                and len(chunk["choices"]) > 0
+                                and chunk["choices"][0].get("delta")
+                                and chunk["choices"][0]["delta"].get("content")
+                            ):
+                                content = chunk["choices"][0]["delta"]["content"] or ""
+                                full_response += content
+                                await callback(content)
+                        except Exception as json_e:
+                            print(f"Error parsing DeepSeek stream chunk: {json_e} - Line: {line}")
+
+    except httpx.HTTPStatusError as e:
+        print(f"DeepSeek API request failed: {e.response.status_code}")
+        print(f"Response body: {await e.response.aread()}")
+        raise
+    except Exception as e:
+        print(f"An unexpected error occurred calling DeepSeek: {e}")
+        raise
+
+    completion_time = time.time() - start_time
+    print(f"DeepSeek completion finished in {completion_time:.2f}s")
     return {"duration": completion_time, "code": full_response}
