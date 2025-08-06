@@ -340,7 +340,33 @@ async def stream_code(websocket: WebSocket):
                     isinstance(completion, BaseException) for completion in completions
                 )
                 if all_generations_failed:
-                    await throw_error("Error generating code. Please contact support.")
+                    # Check if any exception is a RateLimitError or quota-related
+                    quota_error_found = False
+                    for completion in completions:
+                        if isinstance(completion, openai.RateLimitError):
+                            quota_error_found = True
+                            break
+                        # Fallback: check for insufficient_quota in message
+                        if isinstance(completion, Exception) and hasattr(completion, 'message'):
+                            if 'insufficient_quota' in str(completion.message):
+                                quota_error_found = True
+                                break
+                        if isinstance(completion, Exception):
+                            if 'insufficient_quota' in str(completion):
+                                quota_error_found = True
+                                break
+                    if quota_error_found:
+                        error_message = (
+                            "Your OpenAI API key has exceeded its quota. Please check your plan and billing details or update your API key."
+                            + (
+                                " Alternatively, you can purchase code generation credits directly on this website."
+                                if IS_PROD
+                                else ""
+                            )
+                        )
+                        await throw_error(error_message)
+                    else:
+                        await throw_error("Error generating code. Please contact support.")
 
                     # Print the all the underlying exceptions for debugging
                     for completion in completions:
