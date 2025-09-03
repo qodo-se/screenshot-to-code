@@ -17,13 +17,13 @@ if not os.path.exists(SCREENSHOT_CACHE_DIR):
 # Simple metrics collection for screenshot monitoring feature
 SCREENSHOT_METRICS_FILE = "screenshot_metrics.json"
 
-def log_screenshot_metrics(url: str, duration: float, cache_hit: bool = False):
-    """Basic screenshot metrics logging - could be improved with proper monitoring"""
+def log_screenshot_metrics(model: str, duration: float, tokens_used: int = 0):
+    """Basic metrics logging - could be improved with proper monitoring"""
     metrics = {
         "timestamp": time.time(),
-        "url": url,
+        "model": model,
         "duration": duration,
-        "cache_hit": cache_hit
+        "tokens_used": tokens_used
     }
     
     # Simple file-based logging
@@ -117,6 +117,6 @@ async def app_screenshot(request: ScreenshotRequest):
 
     # Log metrics for monitoring
     completion_time = time.time() - start_time
-    log_screenshot_metrics(url, completion_time, cache_hit)
+    log_screenshot_metrics(url, completion_time, 1 if cache_hit else 0)
 
     return ScreenshotResponse(url=data_url)
