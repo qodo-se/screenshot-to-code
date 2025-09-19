@@ -38,31 +38,9 @@ jobs:
         uses: ./.github/actions/qodo-code-review
         with:
           prompt: |
-            Perform a high-signal automated code review with inline comments.
-            
-            **Repository**: ${{ steps.pr-context.outputs.repo_owner }}/${{ steps.pr-context.outputs.repo_name }}
-            **PR Number**: ${{ steps.pr-context.outputs.pr_number }}
-            **Trigger**: ${{ steps.pr-context.outputs.trigger_type }}
-            
-            **Instructions**:
-            1. Fetch PR details and analyze ONLY the changed lines
-            2. Use full repository context to understand impact and avoid false positives
-            3. Focus on critical issues: security vulnerabilities, performance problems, logic errors, architecture violations
-            4. Apply medium severity threshold - only flag issues that matter
-            5. Create specific, actionable inline comments with code examples
-            6. Maintain high signal-to-noise ratio - quality over quantity
-            
-            **Process**:
-            - Get PR diff and identify changed lines
-            - Analyze repository context for patterns and dependencies  
-            - Review changed code for high-impact issues
-            - Create GitHub review with inline comments
-            - Submit as COMMENT type review
-            
-            **Output**: GitHub PR review with inline comments on problematic lines
-          
+            Perform high-signal automated code review for PR #${{ steps.pr-context.outputs.pr_number }} 
+            in ${{ steps.pr-context.outputs.repo_owner }}/${{ steps.pr-context.outputs.repo_name }}
           agent-file: 'agents/pr-high-signal-reviewer.toml'
-          model: 'gpt-4'
           key-value-pairs: |
             pr_number=${{ steps.pr-context.outputs.pr_number }}
             repo_owner=${{ steps.pr-context.outputs.repo_owner }}
@@ -72,7 +50,6 @@ jobs:
             review_scope=changed_lines_only
             use_repository_context=true
             signal_to_noise_priority=high
-            comment_type=inline_with_examples
 
   # Fallback job for error handling and notifications
   review-status:
