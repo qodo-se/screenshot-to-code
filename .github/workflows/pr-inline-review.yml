@@ -20,13 +20,17 @@ jobs:
       pull-requests: write
       issues: read
     
+    outputs:
+      initial-comment-id: ${{ steps.initial-comment.outputs.comment-id }}
+    
     steps:
       - name: Post initial status comment
+        id: initial-comment
         uses: actions/github-script@v7
         with:
           script: |
             const prNumber = ${{ github.event.issue.number }};
-            await github.rest.issues.createComment({
+            const comment = await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: prNumber,
@@ -34,6 +38,10 @@ jobs:
               
             ⏳ Code review is now running... This typically takes 2-3 minutes.`
             });
+            
+            // Store the comment ID for later use
+            core.setOutput('comment-id', comment.data.id);
+            return comment.data.id;
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -80,23 +88,39 @@ jobs:
       issues: write
     
     steps:
-      - name: Update PR with review status
+      - name: Update or remove initial status comment
         uses: actions/github-script@v7
         with:
           script: |
             const prNumber = ${{ github.event.issue.number }};
             const reviewSuccess = '${{ needs.pr-code-review.result }}' === 'success';
+            const initialCommentId = '${{ needs.pr-code-review.outputs.initial-comment-id }}';
             
             if (reviewSuccess) {
-              console.log('✅ High-signal code review completed successfully');
+              // Delete the initial status comment since the review completed successfully
+              // The actual review comments will be posted inline by the qodo action
+              if (initialCommentId && initialCommentId !== 'undefined') {
+                try {
+                  await github.rest.issues.deleteComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    comment_id: parseInt(initialCommentId)
+                  });
+                  console.log('✅ Deleted initial status comment - review completed successfully');
+                } catch (error) {
+                  console.log('⚠️ Could not delete initial comment:', error.message);
+                }
+              }
             } else {
-              // Post a comment about the review failure
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: prNumber,
-                body: `🤖 **Automated Code Review Status**
-                  
+              // Update the initial comment with error information
+              if (initialCommentId && initialCommentId !== 'undefined') {
+                try {
+                  await github.rest.issues.updateComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    comment_id: parseInt(initialCommentId),
+                    body: `🤖 **Automated Code Review Status**
+                      
             ❌ The automated code review encountered an issue and could not complete.
 
             **Possible causes:**
@@ -111,7 +135,34 @@ jobs:
             - Contact maintainers if the issue persists
 
             The review will be retried automatically on the next PR update.`
-              });
+                  });
+                  console.log('⚠️ Updated initial comment with error status');
+                } catch (error) {
+                  console.log('⚠️ Could not update initial comment, posting new comment instead');
+                  // Fallback: post a new comment if updating fails
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: prNumber,
+                    body: `🤖 **Automated Code Review Status**
+                      
+            ❌ The automated code review encountered an issue and could not complete.
+
+            **Possible causes:**
+            - API rate limits
+            - Network connectivity issues  
+            - Large PR size exceeding analysis limits
+            - Repository access permissions
+
+            **Next steps:**
+            - Check the [workflow logs](${context.payload.repository.html_url}/actions/runs/${context.runId}) for details
+            - Try triggering manually with \\\`/code_review\\\` comment
+            - Contact maintainers if the issue persists
+
+            The review will be retried automatically on the next PR update.`
+                  });
+                }
+              }
             }
 
   # Optional: Summary job for analytics and metrics
