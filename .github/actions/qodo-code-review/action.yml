@@ -82,29 +82,17 @@ runs:
       if: steps.cache-uv.outputs.cache-hit != 'true'
       shell: bash
       run: |
-        # Install uv (which includes uvx) with version pinning and checksum verification
+        # Install uv (which includes uvx) with version pinning using python3 -m pip for consistency
         if ! command -v uvx &> /dev/null; then
           echo "Installing uv securely..."
           UV_VERSION="0.4.18"
           
-          case "$RUNNER_OS" in
-            Linux)
-              # Use pip for more secure, reproducible installation
-              pip install uv==$UV_VERSION
-              ;;
-            macOS)
-              # Use homebrew for macOS
-              brew install uv
-              ;;
-            Windows)
-              # Use pip on Windows as well
-              pip install uv==$UV_VERSION
-              ;;
-            *)
-              echo "Error: Unsupported OS for uv installation: $RUNNER_OS"
-              exit 1
-              ;;
-          esac
+          # Use python3 -m pip for consistent installation across all operating systems
+          python3 -m pip install --user uv==$UV_VERSION
+          
+          # Add ~/.local/bin to PATH to ensure uvx command is found
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
           
           # Verify installation
           if command -v uvx &> /dev/null; then
@@ -116,6 +104,12 @@ runs:
         else
           echo "uvx is already available: $(uvx --version)"
         fi
+
+    - name: Ensure PATH includes local bin
+      shell: bash
+      run: |
+        # Ensure ~/.local/bin is in PATH for all subsequent steps
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
 
     - name: Install Qodo Command
       shell: bash
