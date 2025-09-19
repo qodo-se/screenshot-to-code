@@ -78,23 +78,22 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: prNumber,
-                body: |
-                  🤖 **Automated Code Review Status**
+                body: `🤖 **Automated Code Review Status**
                   
-                  ❌ The automated code review encountered an issue and could not complete.
+❌ The automated code review encountered an issue and could not complete.
 
-                  **Possible causes:**
-                  - API rate limits
-                  - Network connectivity issues  
-                  - Large PR size exceeding analysis limits
-                  - Repository access permissions
+**Possible causes:**
+- API rate limits
+- Network connectivity issues  
+- Large PR size exceeding analysis limits
+- Repository access permissions
 
-                  **Next steps:**
-                  - Check the [workflow logs](${context.payload.repository.html_url}/actions/runs/${context.runId}) for details
-                  - Try triggering manually with \`/code_review\` comment
-                  - Contact maintainers if the issue persists
+**Next steps:**
+- Check the [workflow logs](${context.payload.repository.html_url}/actions/runs/${context.runId}) for details
+- Try triggering manually with \`/code_review\` comment
+- Contact maintainers if the issue persists
 
-                  The review will be retried automatically on the next PR update.
+The review will be retried automatically on the next PR update.`
               });
             }
 
