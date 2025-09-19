@@ -56,7 +56,7 @@ jobs:
     name: 'Review Status Update'
     runs-on: ubuntu-latest
     needs: pr-code-review
-    if: always()
+    if: failure() || success()
     
     permissions:
       pull-requests: write
