@@ -21,6 +21,20 @@ jobs:
       issues: read
     
     steps:
+      - name: Post initial status comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = ${{ github.event.issue.number }};
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: `🤖 **Automated Code Review Started**
+              
+            ⏳ Code review is now running... This typically takes 2-3 minutes.`
+            });
+
       - name: Checkout code
         uses: actions/checkout@v4
         with:
