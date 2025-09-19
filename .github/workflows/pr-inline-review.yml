@@ -20,7 +20,34 @@ jobs:
       pull-requests: write
       issues: read
     
+    outputs:
+      initial-comment-id: ${{ steps.initial-comment.outputs.comment-id }}
+    
     steps:
+      - name: Post initial status comment
+        id: initial-comment
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ github.event.issue.number }}
+        with:
+          script: |
+            const prNumber = parseInt(process.env.PR_NUMBER || '');
+            if (isNaN(prNumber) || prNumber <= 0) {
+              throw new Error('Invalid PR number');
+            }
+            const comment = await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: `🤖 **Automated Code Review Started**
+              
+            ⏳ Code review is now running... This typically takes 2-3 minutes.`
+            });
+            
+            // Store the comment ID for later use
+            core.setOutput('comment-id', comment.data.id);
+            return comment.data.id;
+
       - name: Checkout code
         uses: actions/checkout@v4
         with:
@@ -66,38 +93,100 @@ jobs:
       issues: write
     
     steps:
-      - name: Update PR with review status
+      - name: Update or remove initial status comment
         uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ github.event.issue.number }}
+          REVIEW_RESULT: ${{ needs.pr-code-review.result }}
+          INITIAL_COMMENT_ID: ${{ needs.pr-code-review.outputs.initial-comment-id }}
         with:
           script: |
-            const prNumber = ${{ github.event.issue.number }};
-            const reviewSuccess = '${{ needs.pr-code-review.result }}' === 'success';
-            
-            if (reviewSuccess) {
-              console.log('✅ High-signal code review completed successfully');
-            } else {
-              // Post a comment about the review failure
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: prNumber,
-                body: `🤖 **Automated Code Review Status**
-                  
+            // Reusable error message template
+            const createErrorMessage = (workflowUrl) => `🤖 **Automated Code Review Status**
+                          
             ❌ The automated code review encountered an issue and could not complete.
-
+            
             **Possible causes:**
             - API rate limits
             - Network connectivity issues  
             - Large PR size exceeding analysis limits
             - Repository access permissions
-
+            
             **Next steps:**
-            - Check the [workflow logs](${context.payload.repository.html_url}/actions/runs/${context.runId}) for details
+            - Check the [workflow logs](${workflowUrl}) for details
             - Try triggering manually with \\\`/code_review\\\` comment
             - Contact maintainers if the issue persists
-
-            The review will be retried automatically on the next PR update.`
-              });
+            
+            The review will be retried automatically on the next PR update.`;
+            
+            const prNumber = parseInt(process.env.PR_NUMBER || '');
+            if (isNaN(prNumber) || prNumber <= 0) {
+              throw new Error('Invalid PR number');
+            }
+            const reviewSuccess = process.env.REVIEW_RESULT === 'success';
+            const rawInitialId = process.env.INITIAL_COMMENT_ID || '';
+            const initialCommentId = rawInitialId && !isNaN(parseInt(rawInitialId)) ? parseInt(rawInitialId) : null;
+            
+            if (reviewSuccess) {
+              if (initialCommentId) {
+                try {
+                  await github.rest.issues.deleteComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    comment_id: initialCommentId
+                  });
+                  console.log('✅ Deleted initial status comment - review completed successfully');
+                } catch (error) {
+                  console.log('⚠️ Could not delete initial comment:', error.message);
+                }
+              }
+            } else {
+              if (initialCommentId) {
+                try {
+                  const repoUrl = context.payload.repository?.html_url || 'repository';
+                  const runId = context.runId || 'unknown';
+                  const workflowUrl = repoUrl !== 'repository' && runId !== 'unknown' 
+                    ? `${repoUrl}/actions/runs/${runId}` 
+                    : 'the GitHub Actions tab in this repository';
+                  
+                  await github.rest.issues.updateComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    comment_id: initialCommentId,
+                    body: createErrorMessage(workflowUrl)
+                  });
+                  console.log('⚠️ Updated initial comment with error status');
+                } catch (error) {
+                  console.log('⚠️ Could not update initial comment, posting new comment instead');
+                  // Fallback: post a new comment if updating fails
+                  const repoUrl = context.payload.repository?.html_url || 'repository';
+                  const runId = context.runId || 'unknown';
+                  const workflowUrl = repoUrl !== 'repository' && runId !== 'unknown' 
+                    ? `${repoUrl}/actions/runs/${runId}` 
+                    : 'the GitHub Actions tab in this repository';
+                  
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: prNumber,
+                    body: createErrorMessage(workflowUrl)
+                  });
+                }
+              } else {
+                // No valid initial comment id; post a new comment directly
+                const repoUrl = context.payload.repository?.html_url || 'repository';
+                const runId = context.runId || 'unknown';
+                const workflowUrl = repoUrl !== 'repository' && runId !== 'unknown' 
+                  ? `${repoUrl}/actions/runs/${runId}` 
+                  : 'the GitHub Actions tab in this repository';
+                
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  body: createErrorMessage(workflowUrl)
+                });
+              }
             }
 
   # Optional: Summary job for analytics and metrics

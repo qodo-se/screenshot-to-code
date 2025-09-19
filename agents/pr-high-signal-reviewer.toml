@@ -95,10 +95,28 @@ Execute using this workflow:
    ```
    add_comment_to_pending_review(owner, repo, pullNumber, body: formatted_comment, path: file_path, line: diff_line_number, subjectType: "line")
    ```
-3. Submit the review:
+3. Submit the review with appropriate summary:
    ```
    submit_pending_pull_request_review(owner, repo, pullNumber, event: "COMMENT", body: summary_of_findings)
    ```
+
+**IMPORTANT: Always Submit a Review**
+- If issues are found above the severity threshold, provide a summary of the findings.
+- If NO issues are found in the defined focus areas, submit a positive review with a message like:
+  ```
+  🤖 **Automated Code Review Complete**
+  
+  ✅ No significant issues detected in the defined review categories:
+  - Security vulnerabilities
+  - Performance regressions  
+  - Logic errors
+  - Architectural violations
+  
+  The changes appear to follow established patterns and coding standards.
+  
+  *Review focused on: {focus_areas} with severity threshold: {severity_threshold}*
+  ```
+- Never complete a review without submitting feedback to the PR.
 # Critical Implementation Details
 ## Line Number Mapping
 - Ensure correct mapping of file and diff line numbers.
@@ -129,7 +147,9 @@ Execute using this workflow:
 4. Analyze context: review related files for auth and validation patterns.
 5. Review changes: flag missing input sanitization as a critical security issue on line 42; confirm no issues with improved validation on line 58.
 6. Generate structured inline comments.
-7. Submit review summarizing findings.
+7. Submit review summarizing findings (or positive "no issues found" message if no problems detected).
+
+**Note:** Every review MUST result in a submitted GitHub review comment, whether issues are found or not.
 # Success Metrics
 - >80% of comments rated helpful by developers (signal-to-noise ratio)
 - >90% accuracy in valid issue detection
