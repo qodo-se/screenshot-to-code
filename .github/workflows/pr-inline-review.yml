@@ -101,6 +101,24 @@ jobs:
           INITIAL_COMMENT_ID: ${{ needs.pr-code-review.outputs.initial-comment-id }}
         with:
           script: |
+            // Reusable error message template
+            const createErrorMessage = (workflowUrl) => `🤖 **Automated Code Review Status**
+                          
+            ❌ The automated code review encountered an issue and could not complete.
+            
+            **Possible causes:**
+            - API rate limits
+            - Network connectivity issues  
+            - Large PR size exceeding analysis limits
+            - Repository access permissions
+            
+            **Next steps:**
+            - Check the [workflow logs](${workflowUrl}) for details
+            - Try triggering manually with \\\`/code_review\\\` comment
+            - Contact maintainers if the issue persists
+            
+            The review will be retried automatically on the next PR update.`;
+            
             const prNumber = parseInt(process.env.PR_NUMBER || '');
             if (isNaN(prNumber) || prNumber <= 0) {
               throw new Error('Invalid PR number');
@@ -125,96 +143,48 @@ jobs:
             } else {
               if (initialCommentId) {
                 try {
-                  const repoUrl = context.payload.repository?.html_url;
-                  const runId = context.runId;
-                  if (!repoUrl || !runId) {
-                    throw new Error('Missing required context information');
-                  }
-                  const workflowUrl = `${repoUrl}/actions/runs/${runId}`;
+                  const repoUrl = context.payload.repository?.html_url || 'repository';
+                  const runId = context.runId || 'unknown';
+                  const workflowUrl = repoUrl !== 'repository' && runId !== 'unknown' 
+                    ? `${repoUrl}/actions/runs/${runId}` 
+                    : 'the GitHub Actions tab in this repository';
                   
                   await github.rest.issues.updateComment({
                     owner: context.repo.owner,
                     repo: context.repo.repo,
                     comment_id: initialCommentId,
-                    body: `🤖 **Automated Code Review Status**
-                      
-            ❌ The automated code review encountered an issue and could not complete.
-
-            **Possible causes:**
-            - API rate limits
-            - Network connectivity issues  
-            - Large PR size exceeding analysis limits
-            - Repository access permissions
-
-            **Next steps:**
-            - Check the [workflow logs](${workflowUrl}) for details
-            - Try triggering manually with \\\`/code_review\\\` comment
-            - Contact maintainers if the issue persists
-
-            The review will be retried automatically on the next PR update.`
+                    body: createErrorMessage(workflowUrl)
                   });
                   console.log('⚠️ Updated initial comment with error status');
                 } catch (error) {
                   console.log('⚠️ Could not update initial comment, posting new comment instead');
                   // Fallback: post a new comment if updating fails
-                  const repoUrl = context.payload.repository?.html_url;
-                  const runId = context.runId;
-                  if (!repoUrl || !runId) {
-                    throw new Error('Missing required context information');
-                  }
-                  const workflowUrl = `${repoUrl}/actions/runs/${runId}`;
+                  const repoUrl = context.payload.repository?.html_url || 'repository';
+                  const runId = context.runId || 'unknown';
+                  const workflowUrl = repoUrl !== 'repository' && runId !== 'unknown' 
+                    ? `${repoUrl}/actions/runs/${runId}` 
+                    : 'the GitHub Actions tab in this repository';
                   
                   await github.rest.issues.createComment({
                     owner: context.repo.owner,
                     repo: context.repo.repo,
                     issue_number: prNumber,
-                    body: `🤖 **Automated Code Review Status**
-                      
-            ❌ The automated code review encountered an issue and could not complete.
-
-            **Possible causes:**
-            - API rate limits
-            - Network connectivity issues  
-            - Large PR size exceeding analysis limits
-            - Repository access permissions
-
-            **Next steps:**
-            - Check the [workflow logs](${workflowUrl}) for details
-            - Try triggering manually with \\\`/code_review\\\` comment
-            - Contact maintainers if the issue persists
-
-            The review will be retried automatically on the next PR update.`
+                    body: createErrorMessage(workflowUrl)
                   });
                 }
               } else {
                 // No valid initial comment id; post a new comment directly
-                const repoUrl = context.payload.repository?.html_url;
-                const runId = context.runId;
-                if (!repoUrl || !runId) {
-                  throw new Error('Missing required context information');
-                }
-                const workflowUrl = `${repoUrl}/actions/runs/${runId}`;
+                const repoUrl = context.payload.repository?.html_url || 'repository';
+                const runId = context.runId || 'unknown';
+                const workflowUrl = repoUrl !== 'repository' && runId !== 'unknown' 
+                  ? `${repoUrl}/actions/runs/${runId}` 
+                  : 'the GitHub Actions tab in this repository';
                 
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: prNumber,
-                  body: `🤖 **Automated Code Review Status**
-                      
-            ❌ The automated code review encountered an issue and could not complete.
-
-            **Possible causes:**
-            - API rate limits
-            - Network connectivity issues  
-            - Large PR size exceeding analysis limits
-            - Repository access permissions
-
-            **Next steps:**
-            - Check the [workflow logs](${workflowUrl}) for details
-            - Try triggering manually with \\\`/code_review\\\` comment
-            - Contact maintainers if the issue persists
-
-            The review will be retried automatically on the next PR update.`
+                  body: createErrorMessage(workflowUrl)
                 });
               }
             }
