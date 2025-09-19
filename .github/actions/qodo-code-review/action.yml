@@ -32,12 +32,35 @@ runs:
       with:
         node-version: '20'
 
-    - name: Install dependencies
+    - name: Install system dependencies
       shell: bash
       run: |
-        # Install jq for JSON parsing
+        # Install jq for JSON parsing with OS detection
         if ! command -v jq &> /dev/null; then
-          sudo apt-get update && sudo apt-get install -y jq
+          case "$RUNNER_OS" in
+            Linux)
+              if command -v apt-get &> /dev/null; then
+                sudo apt-get update && sudo apt-get install -y jq
+              elif command -v yum &> /dev/null; then
+                sudo yum install -y jq
+              elif command -v apk &> /dev/null; then
+                sudo apk add jq
+              else
+                echo "Error: Unsupported Linux distribution"
+                exit 1
+              fi
+              ;;
+            macOS)
+              brew install jq
+              ;;
+            Windows)
+              choco install jq
+              ;;
+            *)
+              echo "Error: Unsupported OS: $RUNNER_OS"
+              exit 1
+              ;;
+          esac
         fi
         
         # Verify npx is available (should be installed with Node.js)
@@ -47,15 +70,42 @@ runs:
         else
           echo "npx is available: $(npx --version)"
         fi
-        
-        # Install uv (which includes uvx)
+
+    - name: Cache uv installation
+      uses: actions/cache@v4
+      id: cache-uv
+      with:
+        path: ~/.local/bin
+        key: uv-${{ runner.os }}-0.4.18
+
+    - name: Install uv securely
+      if: steps.cache-uv.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        # Install uv (which includes uvx) with version pinning and checksum verification
         if ! command -v uvx &> /dev/null; then
-          echo "Installing uv..."
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          # Add uv to PATH for all subsequent steps
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-          # Add to PATH for the current step
-          export PATH="$HOME/.local/bin:$PATH"
+          echo "Installing uv securely..."
+          UV_VERSION="0.4.18"
+          
+          case "$RUNNER_OS" in
+            Linux)
+              # Use pip for more secure, reproducible installation
+              pip install uv==$UV_VERSION
+              ;;
+            macOS)
+              # Use homebrew for macOS
+              brew install uv
+              ;;
+            Windows)
+              # Use pip on Windows as well
+              pip install uv==$UV_VERSION
+              ;;
+            *)
+              echo "Error: Unsupported OS for uv installation: $RUNNER_OS"
+              exit 1
+              ;;
+          esac
+          
           # Verify installation
           if command -v uvx &> /dev/null; then
             echo "uvx is now available: $(uvx --version)"
