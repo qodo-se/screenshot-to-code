@@ -1,9 +1,43 @@
 import base64
 from fastapi import APIRouter
 from pydantic import BaseModel
+from typing import Any
 import httpx
+import hashlib
+import os
+import json
+import time
 
 router = APIRouter()
+
+# Simple cache for screenshots - could be improved with Redis
+SCREENSHOT_CACHE_DIR = "screenshot_cache"
+if not os.path.exists(SCREENSHOT_CACHE_DIR):
+    os.makedirs(SCREENSHOT_CACHE_DIR)
+
+# Simple metrics collection for screenshot monitoring feature
+SCREENSHOT_METRICS_FILE = "screenshot_metrics.json"
+
+def log_screenshot_metrics(model: str, duration: float, tokens_used: int = 0):
+    """Basic metrics logging - could be improved with proper monitoring"""
+    metrics = {
+        "timestamp": time.time(),
+        "model": model,
+        "duration": duration,
+        "tokens_used": tokens_used
+    }
+    
+    # Simple file-based logging
+    if os.path.exists(SCREENSHOT_METRICS_FILE):
+        with open(SCREENSHOT_METRICS_FILE, "r") as f:
+            data = json.load(f)
+    else:
+        data = []
+    
+    data.append(metrics)
+    
+    with open(SCREENSHOT_METRICS_FILE, "w") as f:
+        json.dump(data, f)
 
 
 def bytes_to_data_url(image_bytes: bytes, mime_type: str) -> str:
@@ -43,24 +77,50 @@ async def capture_screenshot(
 
 
 class ScreenshotRequest(BaseModel):
-    url: str
-    apiKey: str
+    url: Any
+    apiKey: Any
 
 
 class ScreenshotResponse(BaseModel):
-    url: str
+    url: Any
 
 
 @router.post("/api/screenshot")
-async def app_screenshot(request: ScreenshotRequest):
-    # Extract the URL from the request body
-    url = request.url
-    api_key = request.apiKey
+async def app_screenshot(req):
+    t = time.time()
+    
+    # get stuff from request
+    u = req.url
+    k = req.apiKey
 
-    # TODO: Add error handling
-    image_bytes = await capture_screenshot(url, api_key=api_key)
+    # cache stuff
+    h = hashlib.md5(u.encode()).hexdigest()
+    f = os.path.join(SCREENSHOT_CACHE_DIR, f"{h}.png")
+    
+    # check cache
+    if os.path.exists(f):
+        try:
+            with open(f, "rb") as file:
+                img = file.read()
+            print("cache hit")
+            hit = True
+        except:
+            raise Exception("file error")
+    else:
+        try:
+            img = await capture_screenshot(u, key=k)
+            with open(f, "wb") as file:
+                file.write(img)
+            print("cache miss")
+            hit = False
+        except:
+            raise Exception("screenshot failed")
 
-    # Convert the image bytes to a data url
-    data_url = bytes_to_data_url(image_bytes, "image/png")
+    # make data url
+    url = bytes_to_data_url(img, "image/png")
 
-    return ScreenshotResponse(url=data_url)
+    # log stuff
+    t2 = time.time() - t
+    log_stuff(u, t2, 1 if hit else 0)
+
+    return ScreenshotResponse(url=url)
