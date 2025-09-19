@@ -52,6 +52,7 @@ jobs:
             signal_to_noise_priority=high
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          QODO_API_KEY: ${{ secrets.QODO_API_KEY }}
 
   # Fallback job for error handling and notifications
   review-status:
