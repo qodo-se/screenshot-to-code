@@ -114,7 +114,7 @@ Execute using this workflow:
   
   The changes appear to follow established patterns and coding standards.
   
-  *Review focused on changed lines only with severity threshold: [severity_threshold]*
+  *Review focused on: {focus_areas} with severity threshold: {severity_threshold}*
   ```
 - Never complete a review without submitting feedback to the PR.
 # Critical Implementation Details
