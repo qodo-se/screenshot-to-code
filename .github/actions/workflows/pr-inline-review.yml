@@ -1,0 +1,122 @@
+name: 'High-Signal PR Code Review'
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  pr-code-review:
+    name: 'Automated Code Review with Inline Comments'
+    runs-on: ubuntu-latest
+    
+    # Only run when comment contains /code_review on a pull request
+    if: >
+      (github.event_name == 'issue_comment' && 
+       github.event.issue.pull_request &&
+       contains(github.event.comment.body, '/code_review'))
+    
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for better context analysis
+
+      - name: Set PR context variables
+        id: pr-context
+        run: |
+          echo "pr_number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+          echo "trigger_type=manual" >> $GITHUB_OUTPUT
+          echo "repo_owner=${{ github.repository_owner }}" >> $GITHUB_OUTPUT
+          echo "repo_name=${{ github.event.repository.name }}" >> $GITHUB_OUTPUT
+
+      - name: Run High-Signal Code Review
+        uses: ./.github/actions/qodo-code-review
+        with:
+          prompt: |
+            Perform high-signal automated code review for PR #${{ steps.pr-context.outputs.pr_number }} 
+            in ${{ steps.pr-context.outputs.repo_owner }}/${{ steps.pr-context.outputs.repo_name }}
+          agent-file: 'agents/pr-high-signal-reviewer.toml'
+          key-value-pairs: |
+            pr_number=${{ steps.pr-context.outputs.pr_number }}
+            repo_owner=${{ steps.pr-context.outputs.repo_owner }}
+            repo_name=${{ steps.pr-context.outputs.repo_name }}
+            severity_threshold=medium
+            focus_areas=security,performance,bugs,architecture
+            review_scope=changed_lines_only
+            use_repository_context=true
+            signal_to_noise_priority=high
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Fallback job for error handling and notifications
+  review-status:
+    name: 'Review Status Update'
+    runs-on: ubuntu-latest
+    needs: pr-code-review
+    if: failure() || success()
+    
+    permissions:
+      pull-requests: write
+      issues: write
+    
+    steps:
+      - name: Update PR with review status
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = ${{ github.event.issue.number }};
+            const reviewSuccess = '${{ needs.pr-code-review.result }}' === 'success';
+            
+            if (reviewSuccess) {
+              console.log('✅ High-signal code review completed successfully');
+            } else {
+              // Post a comment about the review failure
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: `🤖 **Automated Code Review Status**
+                  
+❌ The automated code review encountered an issue and could not complete.
+
+**Possible causes:**
+- API rate limits
+- Network connectivity issues  
+- Large PR size exceeding analysis limits
+- Repository access permissions
+
+**Next steps:**
+- Check the [workflow logs](${context.payload.repository.html_url}/actions/runs/${context.runId}) for details
+- Try triggering manually with \`/code_review\` comment
+- Contact maintainers if the issue persists
+
+The review will be retried automatically on the next PR update.`
+              });
+            }
+
+  # Optional: Summary job for analytics and metrics
+  review-metrics:
+    name: 'Review Metrics Collection'
+    runs-on: ubuntu-latest
+    needs: pr-code-review
+    if: success()
+    
+    steps:
+      - name: Collect review metrics
+        run: |
+          echo "📊 Review Metrics:"
+          echo "- PR Number: ${{ github.event.issue.number }}"
+          echo "- Repository: ${{ github.repository }}"
+          echo "- Trigger: ${{ github.event_name }}"
+          echo "- Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          echo "- Workflow Run: ${{ github.run_id }}"
+          
+          # Future: Could send metrics to analytics service
+          # curl -X POST "https://analytics.example.com/code-review-metrics" \
+          #   -H "Content-Type: application/json" \
+          #   -d '{"pr": "${{ github.event.issue.number }}", "repo": "${{ github.repository }}", "success": true}'

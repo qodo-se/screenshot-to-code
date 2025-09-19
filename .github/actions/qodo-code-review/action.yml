@@ -1,0 +1,181 @@
+name: 'Qodo Command Action'
+description: 'Run Qodo Command agents with custom TOML and MCP configurations'
+author: 'Qodo'
+
+inputs:
+  prompt:
+    description: 'The prompt or command to run with Qodo'
+    required: true
+  model:
+    description: 'Specify a custom model to use'
+    required: false
+  agent-file:
+    description: 'Path to custom agent.toml file (defaults to the example agent.toml included with this action)'
+    required: false
+  agentfile:
+    description: 'DEPRECATED: Use agent-file instead. Path to custom agent.toml file'
+    required: false
+    deprecationMessage: 'The agentfile input has been deprecated. Please use agent-file instead.'
+  key-value-pairs:
+    description: 'Additional key-value pairs as JSON object or multiline string (e.g., {"key1": "value1", "key2": "value2"} or key1=value1 key2=value2)'
+    required: false
+  qodo-version:
+    description: 'Version of @qodo/command to install (defaults to latest)'
+    required: false
+    default: 'latest'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install system dependencies
+      shell: bash
+      run: |
+        # Install jq for JSON parsing with OS detection
+        if ! command -v jq &> /dev/null; then
+          case "$RUNNER_OS" in
+            Linux)
+              if command -v apt-get &> /dev/null; then
+                sudo apt-get update && sudo apt-get install -y jq
+              elif command -v yum &> /dev/null; then
+                sudo yum install -y jq
+              elif command -v apk &> /dev/null; then
+                sudo apk add jq
+              else
+                echo "Error: Unsupported Linux distribution"
+                exit 1
+              fi
+              ;;
+            macOS)
+              brew install jq
+              ;;
+            Windows)
+              choco install jq
+              ;;
+            *)
+              echo "Error: Unsupported OS: $RUNNER_OS"
+              exit 1
+              ;;
+          esac
+        fi
+        
+        # Verify npx is available (should be installed with Node.js)
+        if ! command -v npx &> /dev/null; then
+          echo "Error: npx is not available. This should have been installed with Node.js."
+          exit 1
+        else
+          echo "npx is available: $(npx --version)"
+        fi
+
+    - name: Cache uv installation
+      uses: actions/cache@v4
+      id: cache-uv
+      with:
+        path: ~/.local/bin
+        key: uv-${{ runner.os }}-0.4.18
+
+    - name: Install uv securely
+      if: steps.cache-uv.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        # Install uv (which includes uvx) with version pinning using python3 -m pip for consistency
+        if ! command -v uvx &> /dev/null; then
+          echo "Installing uv securely..."
+          UV_VERSION="0.4.18"
+          
+          # Use python3 -m pip for consistent installation across all operating systems
+          python3 -m pip install --user uv==$UV_VERSION
+          
+          # Add ~/.local/bin to PATH to ensure uvx command is found
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          
+          # Verify installation
+          if command -v uvx &> /dev/null; then
+            echo "uvx is now available: $(uvx --version)"
+          else
+            echo "Error: Failed to install uvx"
+            exit 1
+          fi
+        else
+          echo "uvx is already available: $(uvx --version)"
+        fi
+
+    - name: Ensure PATH includes local bin
+      shell: bash
+      run: |
+        # Ensure ~/.local/bin is in PATH for all subsequent steps
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+    - name: Install Qodo Command
+      shell: bash
+      run: |
+        if [ "${{ inputs.qodo-version }}" = "latest" ]; then
+          npm install -g @qodo/command
+        else
+          npm install -g @qodo/command@${{ inputs.qodo-version }}
+        fi
+
+    - name: Run Qodo Command
+      shell: bash
+      run: |
+        # Build command arguments safely using arrays
+        QODO_ARGS=("qodo" "--ci")
+        
+        # Add model if specified
+        if [ ! -z "${{ inputs.model }}" ]; then
+          QODO_ARGS+=("--model=${{ inputs.model }}")
+        fi
+        
+        # Add agent-file - handle both new and old parameter names for backward compatibility
+        AGENT_FILE=""
+        if [ ! -z "${{ inputs.agent-file }}" ]; then
+          AGENT_FILE="${{ inputs.agent-file }}"
+        elif [ ! -z "${{ inputs.agentfile }}" ]; then
+          echo "::warning::The 'agentfile' input is deprecated. Please use 'agent-file' instead."
+          AGENT_FILE="${{ inputs.agentfile }}"
+        fi
+        
+        if [ ! -z "$AGENT_FILE" ]; then
+          QODO_ARGS+=("--agent-file=$AGENT_FILE")
+        else
+          # Use default agent-file from action directory
+          QODO_ARGS+=("--agent-file=${{ github.action_path }}/examples/agent.toml")
+        fi
+        
+        # Parse and add key-value pairs safely
+        if [ ! -z "${{ inputs.key-value-pairs }}" ]; then
+          # Check if input is JSON format
+          if echo "${{ inputs.key-value-pairs }}" | jq -e . >/dev/null 2>&1; then
+            # Parse JSON and add each key-value pair as separate arguments
+            while IFS= read -r key_value; do
+              if [ ! -z "$key_value" ]; then
+                QODO_ARGS+=("--set" "$key_value")
+              fi
+            done < <(echo "${{ inputs.key-value-pairs }}" | jq -r 'to_entries | .[] | "\(.key)=\(.value)"')
+          else
+            # Process key=value format line by line
+            while IFS= read -r line; do
+              # Skip empty lines and validate format
+              if [ ! -z "$line" ] && [[ "$line" == *"="* ]]; then
+                QODO_ARGS+=("--set" "$line")
+              fi
+            done <<< "${{ inputs.key-value-pairs }}"
+          fi
+        fi
+        
+        # Echo the command for debugging (safely)
+        echo "Running qodo with arguments:"
+        printf '%s\n' "${QODO_ARGS[@]}"
+        echo "Prompt: ${{ inputs.prompt }}"
+        
+        # Execute the command safely with quoted prompt
+        "${QODO_ARGS[@]}" "${{ inputs.prompt }}"
+
+branding:
+  icon: 'cpu'
+  color: 'blue'
