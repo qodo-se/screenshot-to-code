@@ -141,4 +141,4 @@ jobs:
           # Future: Could send metrics to analytics service
           # curl -X POST "https://analytics.example.com/code-review-metrics" \
           #   -H "Content-Type: application/json" \
-          #   -d '{"pr": "${{ github.event.pull_request.number }}", "repo": "${{ github.repository }}", "success": true}'
+          #   -d '{"pr": "${{ github.event.issue.number }}", "repo": "${{ github.repository }}", "success": true}'

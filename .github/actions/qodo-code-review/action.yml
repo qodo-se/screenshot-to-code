@@ -79,12 +79,12 @@ runs:
     - name: Run Qodo Command
       shell: bash
       run: |
-        # Build the command
-        QODO_CMD="qodo --ci"
+        # Build command arguments safely using arrays
+        QODO_ARGS=("qodo" "--ci")
         
         # Add model if specified
         if [ ! -z "${{ inputs.model }}" ]; then
-          QODO_CMD="$QODO_CMD --model=${{ inputs.model }}"
+          QODO_ARGS+=("--model=${{ inputs.model }}")
         fi
         
         # Add agent-file - handle both new and old parameter names for backward compatibility
@@ -97,44 +97,40 @@ runs:
         fi
         
         if [ ! -z "$AGENT_FILE" ]; then
-          QODO_CMD="$QODO_CMD --agent-file=$AGENT_FILE"
+          QODO_ARGS+=("--agent-file=$AGENT_FILE")
         else
           # Use default agent-file from action directory
-          QODO_CMD="$QODO_CMD --agent-file=${{ github.action_path }}/examples/agent.toml"
+          QODO_ARGS+=("--agent-file=${{ github.action_path }}/examples/agent.toml")
         fi
         
-        # Parse and add key-value pairs
+        # Parse and add key-value pairs safely
         if [ ! -z "${{ inputs.key-value-pairs }}" ]; then
           # Check if input is JSON format
           if echo "${{ inputs.key-value-pairs }}" | jq -e . >/dev/null 2>&1; then
-            # Parse JSON and convert to --set key=value format
-            PAIRS=$(echo "${{ inputs.key-value-pairs }}" | jq -r 'to_entries | .[] | "--set \(.key)=\(.value)"' | tr '\n' ' ')
-            QODO_CMD="$QODO_CMD $PAIRS"
+            # Parse JSON and add each key-value pair as separate arguments
+            while IFS= read -r key_value; do
+              if [ ! -z "$key_value" ]; then
+                QODO_ARGS+=("--set" "$key_value")
+              fi
+            done < <(echo "${{ inputs.key-value-pairs }}" | jq -r 'to_entries | .[] | "\(.key)=\(.value)"')
           else
-            # Assume it's in key=value format separated by spaces or newlines
-            # Convert each key=value to --set key=value
-            PAIRS=""
+            # Process key=value format line by line
             while IFS= read -r line; do
-              # Skip empty lines
-              if [ ! -z "$line" ]; then
-                # Extract key and value from key=value format
-                if [[ "$line" == *"="* ]]; then
-                  PAIRS="$PAIRS --set $line"
-                fi
+              # Skip empty lines and validate format
+              if [ ! -z "$line" ] && [[ "$line" == *"="* ]]; then
+                QODO_ARGS+=("--set" "$line")
               fi
             done <<< "${{ inputs.key-value-pairs }}"
-            QODO_CMD="$QODO_CMD $PAIRS"
           fi
         fi
         
-        # Add the prompt at the end
-        QODO_CMD="$QODO_CMD \"${{ inputs.prompt }}\""
+        # Echo the command for debugging (safely)
+        echo "Running qodo with arguments:"
+        printf '%s\n' "${QODO_ARGS[@]}"
+        echo "Prompt: ${{ inputs.prompt }}"
         
-        # Echo the command for debugging
-        echo "Running: $QODO_CMD"
-        
-        # Execute the command
-        eval $QODO_CMD
+        # Execute the command safely with quoted prompt
+        "${QODO_ARGS[@]}" "${{ inputs.prompt }}"
 
 branding:
   icon: 'cpu'
