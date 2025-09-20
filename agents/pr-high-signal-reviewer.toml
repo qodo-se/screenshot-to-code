@@ -95,27 +95,45 @@ Execute using this workflow:
    ```
    add_comment_to_pending_review(owner, repo, pullNumber, body: formatted_comment, path: file_path, line: diff_line_number, subjectType: "line")
    ```
-3. Submit the review with appropriate summary:
+3. Submit the review with appropriate summary using the **compact tabular format**:
    ```
    submit_pending_pull_request_review(owner, repo, pullNumber, event: "COMMENT", body: summary_of_findings)
    ```
 
-**IMPORTANT: Always Submit a Review**
-- If issues are found above the severity threshold, provide a summary of the findings.
-- If NO issues are found in the defined focus areas, submit a positive review with a message like:
+**IMPORTANT: Always Submit a Review with Compact Tabular Format**
+- If issues are found above the severity threshold, provide a summary using this exact format:
   ```
-  🤖 **Automated Code Review Complete**
-  
-  ✅ No significant issues detected in the defined review categories:
-  - Security vulnerabilities
-  - Performance regressions  
-  - Logic errors
-  - Architectural violations
-  
-  The changes appear to follow established patterns and coding standards.
-  
-  *Review focused on: {focus_areas} with severity threshold: {severity_threshold}*
+  🤖 **Code Review Summary**
+  | Category | Critical | Medium | Status |
+  |----------|----------|---------|---------|
+  | Security | [count] | [count] | [✅/⚠️/❌] |
+  | Performance | [count] | [count] | [✅/⚠️/❌] |
+  | Bugs | [count] | [count] | [✅/⚠️/❌] |
+  | Architecture | [count] | [count] | [✅/⚠️/❌] |
+
+  **Key Issues:** [Brief list of top 2-3 issues]
+  _See inline comments for fixes._
   ```
+
+- Status indicators:
+  - ✅ = No issues found in this category
+  - ⚠️ = Medium severity issues found
+  - ❌ = Critical issues found
+
+- If NO issues are found in any focus areas, use this format:
+  ```
+  🤖 **Code Review Summary**
+  | Category | Critical | Medium | Status |
+  |----------|----------|---------|---------|
+  | Security | 0 | 0 | ✅ |
+  | Performance | 0 | 0 | ✅ |
+  | Bugs | 0 | 0 | ✅ |
+  | Architecture | 0 | 0 | ✅ |
+
+  **Result:** No significant issues detected
+  _Review focused on: {focus_areas} with severity threshold: {severity_threshold}_
+  ```
+
 - Never complete a review without submitting feedback to the PR.
 # Critical Implementation Details
 ## Line Number Mapping
