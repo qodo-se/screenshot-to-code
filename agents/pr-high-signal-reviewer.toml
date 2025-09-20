@@ -115,12 +115,13 @@ Execute using this workflow:
 - If issues are found above the severity threshold, provide a summary using this exact format:
   ```
   🤖 **Code Review Summary**
-  | Category | Critical | Medium | Status |
-  |----------|----------|---------|---------|
-  | Security | [count] | [count] | [✅/⚠️/❌] |
-  | Performance | [count] | [count] | [✅/⚠️/❌] |
-  | Bugs | [count] | [count] | [✅/⚠️/❌] |
-  | Architecture | [count] | [count] | [✅/⚠️/❌] |
+
+  | Category     | Critical | Medium | Status |
+  |--------------|----------|--------|--------|
+  | Security     | [count]  | [count]| [✅/⚠️/❌] |
+  | Performance  | [count]  | [count]| [✅/⚠️/❌] |
+  | Bugs         | [count]  | [count]| [✅/⚠️/❌] |
+  | Architecture | [count]  | [count]| [✅/⚠️/❌] |
 
   **Key Issues:** [Brief list of top 2-3 issues]
   _See inline comments for fixes._
@@ -134,12 +135,13 @@ Execute using this workflow:
 - If NO issues are found in any focus areas, use this format:
   ```
   🤖 **Code Review Summary**
-  | Category | Critical | Medium | Status |
-  |----------|----------|---------|---------|
-  | Security | 0 | 0 | ✅ |
-  | Performance | 0 | 0 | ✅ |
-  | Bugs | 0 | 0 | ✅ |
-  | Architecture | 0 | 0 | ✅ |
+
+  | Category     | Critical | Medium | Status |
+  |--------------|----------|--------|--------|
+  | Security     | 0        | 0      | ✅ |
+  | Performance  | 0        | 0      | ✅ |
+  | Bugs         | 0        | 0      | ✅ |
+  | Architecture | 0        | 0      | ✅ |
 
   **Result:** No significant issues detected
   _Review focused on: {focus_areas} with severity threshold: {severity_threshold}_
