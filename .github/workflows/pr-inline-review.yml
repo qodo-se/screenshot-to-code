@@ -77,6 +77,7 @@ jobs:
             review_scope=changed_lines_only
             use_repository_context=true
             signal_to_noise_priority=high
+            include_diff_suggestions=true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           QODO_API_KEY: ${{ secrets.QODO_API_KEY }}

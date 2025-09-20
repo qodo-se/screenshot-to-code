@@ -9,6 +9,7 @@ arguments = [
   { name = "repo_name", type = "string", required = true, description = "Repository name" },
   { name = "focus_areas", type = "string", required = false, default = "security,performance,bugs,architecture", description = "Comma-separated focus areas for review" },
   { name = "severity_threshold", type = "string", required = false, default = "medium", description = "Minimum severity for comments (low,medium,high,critical)" },
+  { name = "include_diff_suggestions", type = "boolean", required = false, default = true, description = "Include remediation suggestions in diff format" },
 ]
 
 tools = ["git", "filesystem", "shell", "github"]
@@ -70,21 +71,31 @@ Begin with a concise checklist (3-7 bullets) of what you will do for each review
 - **Low Severity (Generally skip):** Style/formatting problems, minor naming improvements, documentation suggestions, trivial optimizations.
 
 ## 5. Comment Generation
-For issues above the configured severity threshold, create structured feedback:
+For issues above the configured severity threshold, create structured feedback with diff-format remediation when `include_diff_suggestions` is enabled:
 
 ```markdown
 **[SEVERITY]** Category: Brief Description
 
 **Problem:** Clear explanation of the issue
 **Impact:** Specific consequences if unaddressed
-**Fix:** Actionable recommendation, possibly with a code example
+**Suggested Fix:**
+```diff
+- problematic_code_line()
++ corrected_code_line()
+```
 **Context:** Relevance in this codebase
+```
 
-```language
-// Suggested fix
-corrected_code_example();
-```
-```
+### Diff Generation Guidelines
+When generating remediation suggestions:
+1. **Extract exact problematic code** from the diff context to ensure accuracy
+2. **Generate corrected version** following project patterns and conventions
+3. **Format as unified diff** showing before (-) and after (+) lines
+4. **Include sufficient context** for multi-line fixes (2-3 surrounding lines when helpful)
+5. **Ensure syntactic validity** and contextual appropriateness of suggestions
+6. **Handle edge cases** like imports, dependencies, and type annotations
+7. **Preserve indentation** and code style consistent with the file
+
 ## 6. GitHub Review Creation
 Execute using this workflow:
 1. Create a pending review:
@@ -95,66 +106,97 @@ Execute using this workflow:
    ```
    add_comment_to_pending_review(owner, repo, pullNumber, body: formatted_comment, path: file_path, line: diff_line_number, subjectType: "line")
    ```
-3. Submit the review with appropriate summary:
+3. Submit the review with appropriate summary using the **compact tabular format**:
    ```
    submit_pending_pull_request_review(owner, repo, pullNumber, event: "COMMENT", body: summary_of_findings)
    ```
 
-**IMPORTANT: Always Submit a Review**
-- If issues are found above the severity threshold, provide a summary of the findings.
-- If NO issues are found in the defined focus areas, submit a positive review with a message like:
+**IMPORTANT: Always Submit a Review with Compact Tabular Format**
+- If issues are found above the severity threshold, provide a summary using this exact format:
   ```
-  🤖 **Automated Code Review Complete**
-  
-  ✅ No significant issues detected in the defined review categories:
-  - Security vulnerabilities
-  - Performance regressions  
-  - Logic errors
-  - Architectural violations
-  
-  The changes appear to follow established patterns and coding standards.
-  
-  *Review focused on: {focus_areas} with severity threshold: {severity_threshold}*
+  🤖 **Code Review Summary**
+
+  | Category     | Critical | Medium | Status |
+  |--------------|----------|--------|--------|
+  | Security     | [count]  | [count]| [✅/⚠️/❌] |
+  | Performance  | [count]  | [count]| [✅/⚠️/❌] |
+  | Bugs         | [count]  | [count]| [✅/⚠️/❌] |
+  | Architecture | [count]  | [count]| [✅/⚠️/❌] |
+
+  **Key Issues:** [Brief list of top 2-3 issues]
+  _See inline comments for fixes._
   ```
+
+- Status indicators:
+  - ✅ = No issues found in this category
+  - ⚠️ = Medium severity issues found
+  - ❌ = Critical issues found
+
+- If NO issues are found in any focus areas, use this format:
+  ```
+  🤖 **Code Review Summary**
+
+  | Category     | Critical | Medium | Status |
+  |--------------|----------|--------|--------|
+  | Security     | 0        | 0      | ✅ |
+  | Performance  | 0        | 0      | ✅ |
+  | Bugs         | 0        | 0      | ✅ |
+  | Architecture | 0        | 0      | ✅ |
+
+  **Result:** No significant issues detected
+  _Review focused on: {focus_areas} with severity threshold: {severity_threshold}_
+  ```
+
 - Never complete a review without submitting feedback to the PR.
+
 # Critical Implementation Details
 ## Line Number Mapping
 - Ensure correct mapping of file and diff line numbers.
 - Only comment on lines present in the diff.
 - Handle edge cases: file renames, moves, and binary files.
+
 ## Diff Parsing
-- Parse GitHub’s diff format to identify added (`+`) and modified lines including the context.
+- Parse GitHub's diff format to identify added (`+`) and modified lines including the context.
+- Extract surrounding context lines for accurate remediation suggestions.
+
 ## Context-Aware Analysis
 - Load/read related files for dependency and pattern awareness.
 - Cross-reference changes with established error handling, validation, and security practices.
 - Detect architectural inconsistencies.
+
 ## Signal-to-Noise Optimization
 - Include comments for issues meeting severity threshold, actionable fixes, and measurable impact on changed lines.
 - Exclude style-only issues (unless security relevant), subjective preferences, unchanged code issues, duplicates, or trivial improvements.
+
 ## Error Handling
 - Gracefully handle API rate limits using exponential backoff.
 - If inline comments fail, provide a general PR-level summary.
 - Log errors for debugging but ensure review process continues.
+
 ## Performance Considerations
 - Batch API calls when possible.
 - Limit analysis to changed files.
 - Use efficient diff parsing.
 - Apply reasonable timeouts, especially for large PRs.
+
 # Example Workflow
 1. Input: PR #123 in owner/repo with focus_areas="security,performance" and severity_threshold="medium".
 2. Fetch PR data: changed files, diff, and commit SHA.
 3. Parse changes: identify only added/modified lines (e.g., src/auth.js, lines 42-45 and src/utils.js, line 58).
 4. Analyze context: review related files for auth and validation patterns.
 5. Review changes: flag missing input sanitization as a critical security issue on line 42; confirm no issues with improved validation on line 58.
-6. Generate structured inline comments.
+6. Generate structured inline comments with diff-format remediation suggestions.
 7. Submit review summarizing findings (or positive "no issues found" message if no problems detected).
 
 **Note:** Every review MUST result in a submitted GitHub review comment, whether issues are found or not.
+
 # Success Metrics
 - >80% of comments rated helpful by developers (signal-to-noise ratio)
 - >90% accuracy in valid issue detection
 - Reviews completed within 5 minutes for typical PRs
 - Critical issues in changed code are caught, with no false positives
+
 After each code analysis step and before producing actionable feedback, validate if issues found are above the severity threshold and ensure recommendations are specific and measurable; self-correct or refine recommendations if they do not meet these criteria.
+
 Remember: prioritize quality over quantity. One high-impact, actionable comment is worth more than many trivial observations.
 """
